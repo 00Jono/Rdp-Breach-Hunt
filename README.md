@@ -47,15 +47,14 @@ The query inspects RDP logon events on the flare host to identify the external I
 
 **Finding:** Successful RDP login from external IP `159.26.106.84` after repeated failures.  
 **KQL Query Used:**
-
+````kql
 DeviceLogonEvents
 | where DeviceName contains "flare"
 | where Timestamp between (datetime(2025-09-13) .. datetime(2025-09-17))
 | project Timestamp, DeviceName, AccountName, LogonType, ActionType, RemoteIP, RemoteIPType
 | order by Timestamp asc
-
+````
 <img width="1172" height="732" alt="image" src="https://github.com/user-attachments/assets/28053cf8-4e6a-44cc-9ba7-f10f5209af1b" />
-
 
 
 ---
@@ -68,7 +67,8 @@ The same logon data shows which valid account was used in the successful login. 
 **Finding:** The attacker successfully authenticated using the account `slflare`.  
 **KQL Query Used:** (same as Flag 1)  
 
-![Flag 1](Images/flag2.png)
+<img width="1172" height="732" alt="image" src="https://github.com/user-attachments/assets/28344e1a-7961-4629-b00d-e66fc154e56a" />
+
 
 ---
 
@@ -80,15 +80,14 @@ Process creation events are queried to uncover suspicious executables launched b
 **Finding:** The attacker executed a suspicious binary `msupdate.exe`.  
 **KQL Query Used:**
 ````kql
-DeviceProcessEvents
-| where DeviceName == "slflarewinsysmo"
-| where InitiatingProcessAccountName == "slflare"
-| where Timestamp between (datetime(2025-09-16 12:45:00) .. datetime(2025-09-19 18:00:00))
-| project Timestamp, DeviceName, AccountName, FileName, FolderPath, ProcessCommandLine
-| order by Timestamp asc
+DeviceRegistryEvents
+| where DeviceName contains "flare"
+| where Timestamp between (datetime(2025-09-14) .. datetime(2025-09-17))
+| where RegistryKey contains "schedule"
+| project Timestamp, DeviceName, RegistryKey, RegistryValueName
+| order by Timestamp desc
 ````
-
-![Flag 1](Images/flag3.png)
+<img width="1173" height="696" alt="image" src="https://github.com/user-attachments/assets/6a431c2a-d0f6-4b0b-8836-0ecf9d2bb155" />
 
 ---
 
@@ -112,12 +111,14 @@ Registry event data is searched for TaskCache entries to detect persistence mech
 ````kql
 DeviceRegistryEvents
 | where DeviceName contains "flare"
-| where Timestamp between (datetime(2025-09-16 12:45:00) .. datetime(2025-09-17 23:59:59))
-| where RegistryKey contains "TaskCache"
-| project Timestamp, DeviceName, ActionType, RegistryKey, RegistryValueName, RegistryValueData, InitiatingProcessFileName, InitiatingProcessCommandLine, InitiatingProcessAccountName
-| order by Timestamp asc
+| where Timestamp between (datetime(2025-09-14) .. datetime(2025-09-17))
+| where RegistryKey contains "schedule"
+| project Timestamp, DeviceName, RegistryKey, RegistryValueName
+| order by Timestamp desc
+
 ````
-![Flag 1](Images/flag5.png)
+
+<img width="1184" height="738" alt="image" src="https://github.com/user-attachments/assets/5ca4ce11-e8b5-4918-a10e-b17eebb93e23" />
 
 ---
 
@@ -130,10 +131,15 @@ Registry modifications are reviewed to detect Defender configuration changes. Th
 **KQL Query Used:**
 ````kql
 DeviceRegistryEvents
-| where RegistryKey contains "Exclusion"
-| where Timestamp between (datetime(2025-09-16 12:45:00) .. datetime(2025-09-19 23:59:59))
+| where DeviceName contains "flare"
+| where Timestamp between (datetime(2025-09-14) .. datetime(2025-09-17))
+| where ActionType == "RegistryValueSet"
+| where RegistryKey contains "Windows Defender"
+| project Timestamp, DeviceName, RegistryKey, RegistryValueName
+| order by Timestamp desc
 ````
-![Flag 1](Images/flag6.png)
+
+<img width="1217" height="737" alt="image" src="https://github.com/user-attachments/assets/df4b7fb6-ad5a-442c-a25b-6cbd80999928" />
 
 ---
 
@@ -147,12 +153,12 @@ Process events are filtered for cmd.exe with the systeminfo argument. This ident
 ````kql
 DeviceProcessEvents
 | where DeviceName contains "flare"
-| where Timestamp between (datetime(2025-09-16 19:30:00) .. datetime(2025-09-16 19:50:00))
-| project Timestamp, DeviceName, AccountName, FileName, ProcessCommandLine
+| where Timestamp between (datetime(2025-09-14) .. datetime(2025-09-17))
+| where InitiatingProcessAccountName == "slflare"
+| project Timestamp, FileName, ProcessCommandLine, InitiatingProcessFileName, AccountName
 | order by Timestamp asc
 ````
-
-![Flag 1](Images/flag7.png)
+<img width="1184" height="742" alt="image" src="https://github.com/user-attachments/assets/23156a32-ba3d-48f1-8111-1a46b6fbf6a4" />
 
 ---
 
@@ -164,15 +170,15 @@ File creation logs are queried to spot sensitive data being staged. This capture
 **Finding:** Sensitive data staged into `backup_sync.zip` in AppData Temp directory.  
 **KQL Query Used:**
 ````kql
-DeviceProcessEvents
-| where AccountName == "slflare"
-| where Timestamp between (datetime(2025-09-16) .. datetime(2025-09-19))
-| where ProcessCommandLine has_any (".zip",".rar","7z")
-| project Timestamp, DeviceName, AccountName, FileName, ProcessCommandLine
-| order by Timestamp desc 
+DeviceFileEvents
+| where DeviceName contains "flare"
+| where InitiatingProcessAccountName == "slflare"
+| where Timestamp between (datetime(2025-09-14) .. datetime(2025-09-17))
+| where FileName contains "zip"
+| project Timestamp, DeviceName, FolderPath, FileName, InitiatingProcessFileName, InitiatingProcessCommandLine, InitiatingProcessAccountName, ReportId
+| sort by Timestamp desc 
 ````
-
-![Flag 1](Images/flag8.png)
+<img width="1222" height="731" alt="image" src="https://github.com/user-attachments/assets/31e3d2d1-9ed8-43c1-8c39-5ceae2c9abed" />
 
 ---
 
@@ -185,13 +191,13 @@ Network events are inspected for outbound connections to known malicious IPs. Th
 **KQL Query Used:**
 ````kql
 DeviceNetworkEvents
-| where DeviceName contains "flare"
-| where Timestamp between (datetime(2025-09-16) .. datetime(2025-09-19))
-| project Timestamp, DeviceName, InitiatingProcessFileName, InitiatingProcessCommandLine, RemoteIP, RemotePort, ActionType
-| order by Timestamp asc
+    | where DeviceName contains "flare"
+    | where InitiatingProcessAccountName == "slflare"
+    | where Timestamp between (datetime(2025-09-14) .. datetime(2025-09-17))
+    | project InitiatingProcessRemoteSessionIP, ActionType, RemoteIP, RemotePort, InitiatingProcessFileName, Timestamp, RemoteUrl, InitiatingProcessCommandLine
+    | order by Timestamp asc
 ````
-
-![Flag 1](Images/flag9.png)
+<img width="1165" height="720" alt="image" src="https://github.com/user-attachments/assets/6c4d840b-bc32-4877-a498-24fc25dd0c42" />
 
 ---
 
@@ -201,16 +207,7 @@ DeviceNetworkEvents
 The query isolates curl.exe network activity on port 8081. This directly exposes the attacker’s attempt to exfiltrate the staged archive to their server.
 
 **Finding:** `curl.exe` attempted to POST `backup_sync.zip` to `185.92.220.87:8081`.  
-**KQL Query Used:**
-````kql
-DeviceNetworkEvents
-| where DeviceName contains "flare"
-| where RemoteIP == "185.92.220.87"
-| where Timestamp between (datetime(2025-09-16) .. datetime(2025-09-19))
-| project Timestamp, DeviceName, InitiatingProcessFileName, InitiatingProcessCommandLine, RemoteIP, RemotePort, ActionType
-| order by Timestamp desc 
-````
-![Flag 1](Images/flag9_and_10.png)
+**KQL Query Used:** (derived from Flag 9 results)  
 
 ---
 
@@ -243,15 +240,6 @@ DeviceNetworkEvents
 | Collection | Local Data Staging | T1074.001 |
 | Command & Control | Application Layer Protocol: Web Protocols | T1071.001 |
 | Exfiltration | Exfiltration Over Unencrypted Protocol | T1048.003 |
-
----
-
-## 🔷 Diamond Model Summary
-
-- **Adversary:** External attacker using brute-force RDP from `159.26.106.84`  
-- **Infrastructure:** Remote IP `185.92.220.87`, port `8081` for exfiltration  
-- **Capabilities:** Credential access, persistence via scheduled tasks, defense evasion, discovery, exfiltration  
-- **Victim:** Windows host `slflarewinsysmo`, user account `slflare`  
 
 ---
 
