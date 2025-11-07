@@ -47,20 +47,15 @@ The query inspects RDP logon events on the flare host to identify the external I
 
 **Finding:** Successful RDP login from external IP `159.26.106.84` after repeated failures.  
 **KQL Query Used:**
-````kql
 DeviceLogonEvents
 | where DeviceName contains "flare"
-| where Timestamp between (datetime(2025-09-14 00:00:00) .. datetime(2025-09-14 23:59:59))
+| where Timestamp between (datetime(2025-09-13) .. datetime(2025-09-17))
+| project Timestamp, DeviceName, AccountName, LogonType, ActionType, RemoteIP, RemoteIPType
+| order by Timestamp asc
 
-DeviceLogonEvents
-| where DeviceName == "slflarewinsysmo"
-| where Timestamp between (datetime(2025-09-13 00:00:00) .. datetime(2025-09-16 23:59:59))
-| where RemoteIP == "159.26.106.84"
-| project Timestamp, DeviceName, AccountName, ActionType, LogonType, RemoteIP
-| order by Timestamp desc
-````
+<img width="1172" height="732" alt="image" src="https://github.com/user-attachments/assets/28053cf8-4e6a-44cc-9ba7-f10f5209af1b" />
 
-![Flag 1](Images/flag1.png)
+
 
 ---
 
